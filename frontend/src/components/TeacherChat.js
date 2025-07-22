@@ -10,49 +10,97 @@ const TeacherChat = ({ schoolName, teacherName, setSchoolName, setTeacherName })
   const [message, setMessage] = useState('');
   const messagesEndRef = useRef(null);
 
+  // useEffect(() => {
+  //   if (!schoolName || !teacherName) {
+  //     setChat(null);
+  //     return;
+  //   }
+
+  //   const fetchChat = async () => {
+  //     try {
+  //       const response = await getTeacherChat(schoolName, teacherName);
+  //       setChat(response.data);
+  //       if (response.data?._id) {
+  //         socket.emit('joinChat', response.data._id);
+  //       }
+  //     } catch (error) {
+  //       console.error('Error fetching chat:', error);
+  //       setChat(null);
+  //     }
+  //   };
+
+  //   fetchChat();
+
+  //   socket.on('newMessage', (updatedChat) => {
+  //     if (updatedChat.schoolName === schoolName && updatedChat.teacherName === teacherName) {
+  //       setChat(updatedChat);
+  //     }
+  //   });
+
+  //   socket.on('chatClosed', (chatId) => {
+  //     if (chat?._id === chatId) {
+  //       setChat(null);
+  //       setSchoolName('');
+  //       setTeacherName('');
+  //     }
+  //   });
+
+  //   return () => {
+  //     socket.off('newMessage');
+  //     socket.off('chatClosed');
+  //     if (chat?._id) {
+  //       socket.emit('leaveChat', chat._id);
+  //     }
+  //   };
+  // }, [schoolName, teacherName, setSchoolName, setTeacherName]);
+
   useEffect(() => {
-    if (!schoolName || !teacherName) {
+  if (!schoolName || !teacherName) {
+    setChat(null);
+    return;
+  }
+
+  let currentChatId = null;
+
+  const fetchChat = async () => {
+    try {
+      const response = await getTeacherChat(schoolName, teacherName);
+      setChat(response.data);
+      if (response.data?._id) {
+        currentChatId = response.data._id;
+        socket.emit('joinChat', currentChatId);
+      }
+    } catch (error) {
       setChat(null);
-      return;
     }
+  };
 
-    const fetchChat = async () => {
-      try {
-        const response = await getTeacherChat(schoolName, teacherName);
-        setChat(response.data);
-        if (response.data?._id) {
-          socket.emit('joinChat', response.data._id);
-        }
-      } catch (error) {
-        console.error('Error fetching chat:', error);
-        setChat(null);
-      }
-    };
+  fetchChat();
 
-    fetchChat();
+  const handleNewMessage = (updatedChat) => {
+    if (updatedChat._id === currentChatId) {
+      setChat(updatedChat);
+    }
+  };
 
-    socket.on('newMessage', (updatedChat) => {
-      if (updatedChat.schoolName === schoolName && updatedChat.teacherName === teacherName) {
-        setChat(updatedChat);
-      }
-    });
+  socket.on('newMessage', handleNewMessage);
 
-    socket.on('chatClosed', (chatId) => {
-      if (chat?._id === chatId) {
-        setChat(null);
-        setSchoolName('');
-        setTeacherName('');
-      }
-    });
+  socket.on('chatClosed', (chatId) => {
+    if (currentChatId === chatId) {
+      setChat(null);
+      setSchoolName('');
+      setTeacherName('');
+    }
+  });
 
-    return () => {
-      socket.off('newMessage');
-      socket.off('chatClosed');
-      if (chat?._id) {
-        socket.emit('leaveChat', chat._id);
-      }
-    };
-  }, [schoolName, teacherName, setSchoolName, setTeacherName]);
+  return () => {
+    socket.off('newMessage', handleNewMessage);
+    socket.off('chatClosed');
+    if (currentChatId) {
+      socket.emit('leaveChat', currentChatId);
+    }
+  };
+}, [schoolName, teacherName, setSchoolName, setTeacherName]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -144,15 +192,17 @@ const TeacherChat = ({ schoolName, teacherName, setSchoolName, setTeacherName })
         >
           Send
         </button>
-        <button
+        {/* <button
           className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
           onClick={handleCloseChat}
         >
           Close Chat
-        </button>
+        </button> */}
       </div>
     </div>
   );
 };
 
 export default TeacherChat;
+
+

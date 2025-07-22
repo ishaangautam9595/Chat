@@ -10,33 +10,63 @@ const TeamChat = ({ chat }) => {
   const [message, setMessage] = useState('');
   const messagesEndRef = useRef(null);
 
+  // useEffect(() => {
+  //   if (!chat) {
+  //     setMessages([]);
+  //     return;
+  //   }
+
+  //   setMessages(chat.messages || []);
+  //   socket.emit('joinChat', chat._id);
+
+  //   socket.on('newMessage', (updatedChat) => {
+  //     if (updatedChat._id === chat._id) {
+  //       setMessages(updatedChat.messages || []);
+  //     }
+  //   });
+
+  //   socket.on('chatClosed', (chatId) => {
+  //     if (chatId === chat._id) {
+  //       setMessages([]);
+  //     }
+  //   });
+
+  //   return () => {
+  //     socket.off('newMessage');
+  //     socket.off('chatClosed');
+  //     socket.emit('leaveChat', chat._id);
+  //   };
+  // }, [chat]);
+
   useEffect(() => {
-    if (!chat) {
-      setMessages([]);
-      return;
+  if (!chat) {
+    setMessages([]);
+    return;
+  }
+
+  setMessages(chat.messages || []);
+  socket.emit('joinChat', chat._id);
+
+  const handleNewMessage = (updatedChat) => {
+    if (updatedChat._id === chat._id) {
+      setMessages(updatedChat.messages || []);
     }
+  };
 
-    setMessages(chat.messages || []);
-    socket.emit('joinChat', chat._id);
+  socket.on('newMessage', handleNewMessage);
 
-    socket.on('newMessage', (updatedChat) => {
-      if (updatedChat._id === chat._id) {
-        setMessages(updatedChat.messages || []);
-      }
-    });
+  socket.on('chatClosed', (chatId) => {
+    if (chatId === chat._id) {
+      setMessages([]);
+    }
+  });
 
-    socket.on('chatClosed', (chatId) => {
-      if (chatId === chat._id) {
-        setMessages([]);
-      }
-    });
-
-    return () => {
-      socket.off('newMessage');
-      socket.off('chatClosed');
-      socket.emit('leaveChat', chat._id);
-    };
-  }, [chat]);
+  return () => {
+    socket.off('newMessage', handleNewMessage);
+    socket.off('chatClosed');
+    socket.emit('leaveChat', chat._id);
+  };
+}, [chat]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

@@ -44,6 +44,7 @@ const ChatSplitScreen = () => {
     };
   }, [selectedChat]);
 
+
   return (
     <div className="flex h-screen">
       <div className="w-1/2 p-4 border-r">

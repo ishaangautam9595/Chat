@@ -1,5 +1,5 @@
 const Chat = require('../models/Chat');
-// const { sendNotificationEmail } = require('../services/emailService');
+const { sendNotificationEmail } = require('../services/emailServices');
 const { validationResult } = require('express-validator');
 
 const createOrContinueChat = async (req, res, next) => {
@@ -12,9 +12,16 @@ const createOrContinueChat = async (req, res, next) => {
     const { schoolName, teacherName, message } = req.body;
     const io = req.app.get('io');
     
+    if (!io) {
+      console.error('Socket.IO instance is undefined in createOrContinueChat');
+      return res.status(500).json({ error: 'Internal server error: Socket.IO not initialized' });
+    }
+
     let chat = await Chat.findOne({ schoolName, teacherName, isActive: true });
 
-    if (!chat) {
+    const isNewChat = !chat;
+
+    if (isNewChat) {
       chat = new Chat({
         schoolName,
         teacherName,
@@ -25,10 +32,13 @@ const createOrContinueChat = async (req, res, next) => {
     }
 
     await chat.save();
-    console.log(`Chat saved: ${chat._id}, Messages: ${chat.messages.length}, Emitting newMessage to room ${chat._id}`);
-    // await sendNotificationEmail(schoolName, teacherName, message); // Commented out as per user request
+    console.log(`Chat ${isNewChat ? 'created' : 'updated'}: ${chat._id}, Messages: ${chat.messages.length}, Emitting newMessage to room ${chat._id}`);
     
-    // Emit new message and new chat events
+    if (isNewChat) {
+      // await sendNotificationEmail(schoolName, teacherName, message);
+      console.log(`Email notification triggered for new chat: ${chat._id}`);
+    }
+    
     io.to(chat._id.toString()).emit('newMessage', chat);
     io.emit('newChat', chat);
 
@@ -75,6 +85,11 @@ const replyToChat = async (req, res, next) => {
     const { chatId, message } = req.body;
     const io = req.app.get('io');
     
+    if (!io) {
+      console.error('Socket.IO instance is undefined in replyToChat');
+      return res.status(500).json({ error: 'Internal server error: Socket.IO not initialized' });
+    }
+
     const chat = await Chat.findById(chatId);
     if (!chat || !chat.isActive) {
       return res.status(404).json({ error: 'Chat not found or closed' });
@@ -84,7 +99,6 @@ const replyToChat = async (req, res, next) => {
     await chat.save();
     console.log(`Reply saved for chat: ${chatId}, Messages: ${chat.messages.length}, Emitting newMessage to room ${chatId}`);
     
-    // Emit new message and updated chat events
     io.to(chatId).emit('newMessage', chat);
     io.emit('newChat', chat);
 
@@ -105,6 +119,11 @@ const closeChat = async (req, res, next) => {
     const { chatId } = req.body;
     const io = req.app.get('io');
     
+    if (!io) {
+      console.error('Socket.IO instance is undefined in closeChat');
+      return res.status(500).json({ error: 'Internal server error: Socket.IO not initialized' });
+    }
+
     const chat = await Chat.findById(chatId);
     if (!chat) {
       return res.status(404).json({ error: 'Chat not found' });
@@ -114,7 +133,6 @@ const closeChat = async (req, res, next) => {
     await chat.save();
     console.log(`Chat closed: ${chatId}, Emitting chatClosed to room ${chatId}`);
     
-    // Emit chat closed and updated chat events
     io.to(chatId).emit('chatClosed', chatId);
     io.emit('newChat', chat);
 

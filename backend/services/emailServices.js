@@ -11,7 +11,7 @@ const transporter = nodemailer.createTransport({
 const sendNotificationEmail = async (schoolName, teacherName, message) => {
   if (!process.env.TEAM_EMAILS) {
     console.error('TEAM_EMAILS environment variable is not defined');
-    return; // Skip sending email but don't throw an error
+    return;
   }
 
   const teamEmails = process.env.TEAM_EMAILS.split(',').map(email => email.trim());
@@ -28,7 +28,6 @@ const sendNotificationEmail = async (schoolName, teacherName, message) => {
     console.log('Notification email sent to team');
   } catch (error) {
     console.error('Error sending email:', error);
-    // Do not throw error to avoid disrupting chat functionality
   }
 };
 
