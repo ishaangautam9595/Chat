@@ -1,133 +1,116 @@
 import { useState, useEffect, useRef } from 'react';
-import io from 'socket.io-client';
+import socket from '../services/socket';
 import { sendMessage, getTeacherChat, closeChat } from '../services/api';
 import ChatMessage from './ChatMessage';
-
-const socket = io(process.env.REACT_APP_API_URL);
 
 const TeacherChat = ({ schoolName, teacherName, setSchoolName, setTeacherName }) => {
   const [chat, setChat] = useState(null);
   const [message, setMessage] = useState('');
+  const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef(null);
 
-  // useEffect(() => {
-  //   if (!schoolName || !teacherName) {
-  //     setChat(null);
-  //     return;
-  //   }
-
-  //   const fetchChat = async () => {
-  //     try {
-  //       const response = await getTeacherChat(schoolName, teacherName);
-  //       setChat(response.data);
-  //       if (response.data?._id) {
-  //         socket.emit('joinChat', response.data._id);
-  //       }
-  //     } catch (error) {
-  //       console.error('Error fetching chat:', error);
-  //       setChat(null);
-  //     }
-  //   };
-
-  //   fetchChat();
-
-  //   socket.on('newMessage', (updatedChat) => {
-  //     if (updatedChat.schoolName === schoolName && updatedChat.teacherName === teacherName) {
-  //       setChat(updatedChat);
-  //     }
-  //   });
-
-  //   socket.on('chatClosed', (chatId) => {
-  //     if (chat?._id === chatId) {
-  //       setChat(null);
-  //       setSchoolName('');
-  //       setTeacherName('');
-  //     }
-  //   });
-
-  //   return () => {
-  //     socket.off('newMessage');
-  //     socket.off('chatClosed');
-  //     if (chat?._id) {
-  //       socket.emit('leaveChat', chat._id);
-  //     }
-  //   };
-  // }, [schoolName, teacherName, setSchoolName, setTeacherName]);
-
   useEffect(() => {
-  if (!schoolName || !teacherName) {
-    setChat(null);
-    return;
-  }
+    if (!schoolName || !teacherName) {
+      setChat(null);
+      return;
+    }
 
-  let currentChatId = null;
+    let currentChatId = null;
 
-  const fetchChat = async () => {
-    try {
-      const response = await getTeacherChat(schoolName, teacherName);
-      setChat(response.data);
-      if (response.data?._id) {
-        currentChatId = response.data._id;
-        socket.emit('joinChat', currentChatId);
+    const fetchChat = async () => {
+      try {
+        const response = await getTeacherChat(schoolName, teacherName);
+        setChat(response.data);
+        if (response.data?._id) {
+          currentChatId = response.data._id;
+          socket.emit('joinChat', currentChatId);
+        }
+      } catch (error) {
+        console.error('Error fetching chat:', error);
+        setChat(null);
       }
-    } catch (error) {
-      setChat(null);
-    }
-  };
+    };
 
-  fetchChat();
+    fetchChat();
 
-  const handleNewMessage = (updatedChat) => {
-    if (updatedChat._id === currentChatId) {
-      setChat(updatedChat);
-    }
-  };
+    const handleNewMessage = (updatedChat) => {
+      console.log('New message received for chat:', updatedChat._id);
+      if (updatedChat._id === currentChatId) {
+        setChat(updatedChat);
+      }
+    };
 
-  socket.on('newMessage', handleNewMessage);
+    const handleChatClosed = (updatedChat) => {
+      console.log('Chat closed received for chat:', updatedChat._id);
+      if (updatedChat._id === currentChatId) {
+        setChat(null);
+        setSchoolName('');
+        setTeacherName('');
+      }
+    };
 
-  socket.on('chatClosed', (chatId) => {
-    if (currentChatId === chatId) {
-      setChat(null);
-      setSchoolName('');
-      setTeacherName('');
-    }
-  });
+    const handleSocketError = (error) => {
+      console.error('Socket error:', error);
+    };
 
-  return () => {
-    socket.off('newMessage', handleNewMessage);
-    socket.off('chatClosed');
-    if (currentChatId) {
-      socket.emit('leaveChat', currentChatId);
-    }
-  };
-}, [schoolName, teacherName, setSchoolName, setTeacherName]);
+    const handleReconnect = () => {
+      if (currentChatId) socket.emit('joinChat', currentChatId);
+    };
+
+    socket.on('newMessage', handleNewMessage);
+    socket.on('chatClosed', handleChatClosed);
+    socket.on('error', handleSocketError);
+    socket.on('reconnect', handleReconnect);
+
+    return () => {
+      socket.off('newMessage', handleNewMessage);
+      socket.off('chatClosed', handleChatClosed);
+      socket.off('error', handleSocketError);
+      socket.off('reconnect', handleReconnect);
+      if (currentChatId) {
+        socket.emit('leaveChat', currentChatId);
+      }
+    };
+  }, [schoolName, teacherName, setSchoolName, setTeacherName]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const element = messagesEndRef.current?.parentElement;
+    if (element) {
+      const isNearBottom = element.scrollHeight - element.scrollTop <= element.clientHeight + 100;
+      if (isNearBottom) {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
   }, [chat?.messages]);
 
   const handleSendMessage = async () => {
-    if (!message.trim()) return;
+    if (!message.trim() || isSending) return;
 
     try {
+      setIsSending(true);
       const response = await sendMessage({ schoolName, teacherName, message });
       setChat(response.data.chat);
       setMessage('');
     } catch (error) {
       console.error('Error sending message:', error);
+    } finally {
+      setIsSending(false);
     }
   };
 
   const handleCloseChat = async () => {
-    if (!chat?._id) return;
+    if (!chat?._id || isSending) return;
 
     try {
+      setIsSending(true);
       await closeChat(chat._id);
       setChat(null);
       setSchoolName('');
       setTeacherName('');
     } catch (error) {
       console.error('Error closing chat:', error);
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -144,6 +127,7 @@ const TeacherChat = ({ schoolName, teacherName, setSchoolName, setTeacherName })
               placeholder="School Name"
               value={schoolName}
               onChange={(e) => setSchoolName(e.target.value)}
+              aria-label="School Name"
             />
             <input
               type="text"
@@ -151,12 +135,27 @@ const TeacherChat = ({ schoolName, teacherName, setSchoolName, setTeacherName })
               placeholder="Teacher Name"
               value={teacherName}
               onChange={(e) => setTeacherName(e.target.value)}
+              aria-label="Teacher Name"
             />
             <button
-              className="w-full bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-              onClick={() => schoolName.trim() && teacherName.trim() && setSchoolName(schoolName)}
+              className="w-full bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:bg-gray-400"
+              onClick={async () => {
+                if (schoolName.trim() && teacherName.trim()) {
+                  try {
+                    const response = await getTeacherChat(schoolName, teacherName);
+                    setChat(response.data);
+                    if (response.data?._id) {
+                      socket.emit('joinChat', response.data._id);
+                    }
+                  } catch (error) {
+                    console.error('Error starting chat:', error);
+                    setChat(null);
+                  }
+                }
+              }}
+              disabled={isSending}
             >
-              Start Chat
+              {isSending ? 'Starting...' : 'Start Chat'}
             </button>
           </div>
         </div>
@@ -171,8 +170,8 @@ const TeacherChat = ({ schoolName, teacherName, setSchoolName, setTeacherName })
       </h2>
       <div className="bg-white p-4 rounded-lg shadow h-[calc(100vh-200px)] overflow-y-auto mb-4">
         {chat?.messages?.length > 0 ? (
-          chat.messages.map((msg, index) => (
-            <ChatMessage key={index} message={msg} />
+          chat.messages.map((msg) => (
+            <ChatMessage key={msg._id || msg.timestamp || Math.random()} message={msg} />
           ))
         ) : (
           <p className="text-gray-500 text-center">No messages yet</p>
@@ -185,24 +184,32 @@ const TeacherChat = ({ schoolName, teacherName, setSchoolName, setTeacherName })
           placeholder="Type your message..."
           value={message}
           onChange={(e) => setMessage(e.target.value)}
+          onKeyPress={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleSendMessage();
+            }
+          }}
+          aria-label="Type your message"
+          disabled={isSending}
         />
         <button
-          className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+          className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:bg-gray-400"
           onClick={handleSendMessage}
+          disabled={isSending}
         >
-          Send
+          {isSending ? 'Sending...' : 'Send'}
         </button>
-        {/* <button
-          className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+        <button
+          className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 disabled:bg-gray-400"
           onClick={handleCloseChat}
+          disabled={isSending}
         >
-          Close Chat
-        </button> */}
+          {isSending ? 'Closing...' : 'Close Chat'}
+        </button>
       </div>
     </div>
   );
 };
 
 export default TeacherChat;
-
-
